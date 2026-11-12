@@ -10,14 +10,76 @@ the result back to this repository.
 
 ## What it does
 
-1. **Fetch** — `scripts/fetch_sources.py` downloads every list in
-   `sources/sources.json` (101 lists across 46 repositories), normalizes the
-   line formats, deduplicates and writes per-protocol pools.
-2. **Validate** — the validator fetches a real URL through every proxy. A
+1. **Check in** — `scripts/checkin_sources.py` clones each of the 34 upstream
+   proxy-list repositories shallow into `work/repos/`, or pulls the ones
+   already there, and records the commit each one is at.
+2. **Fetch** — `scripts/fetch_sources.py` reads the lists
+   in `sources/sources.json` (105 lists across 34 repositories), taking them
+   from the checkouts where the file is there and from the raw URL where it
+   is not, normalizes the line formats, deduplicates and writes per-protocol
+   pools.
+3. **Validate** — the validator fetches a real URL through every proxy. A
    proxy only survives if it delivers the complete response in time, so dead
    and stalling entries are dropped.
-3. **Categorize** — `scripts/categorize.py` sorts the survivors by protocol,
+4. **Categorize** — `scripts/categorize.py` sorts the survivors by protocol,
    country, speed, network type and anonymity class.
+5. **Merge** — `scripts/build_router_pool.py` folds the validated pool into
+   the router's own pool: a proxy the validator tested and found dead is
+   dropped, one it never tested is kept, and the newly working ones are
+   added.
+
+## The local refresh pipeline
+
+The GitHub Actions workflow refreshes this repository's own `output/`. The
+local pipeline does more: it publishes the result into the **9router**
+repository, where the router reads it from, and reloads the running shim.
+
+```bash
+./scripts/install_schedule.sh install 6 41   # 06:41 daily, launchd
+./scripts/install_schedule.sh status
+./scripts/install_schedule.sh run           # run it now, in the foreground
+```
+
+`scripts/refresh_and_publish.sh` is the whole thing:
+
+```
+check in the 34 repositories
+  -> scrape the 105 lists
+  -> validate every proxy in them
+  -> categorize the survivors
+  -> merge into the router's pool
+  -> publish into the 9router repository, commit, push
+  -> reload the running shim
+```
+
+A step that fails stops the run before the publish, so a broken pipeline never
+replaces a good pool. The log is `work/refresh.log`.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `AGG_DIR` | the checkout | where the pipeline runs |
+| `ROUTER_REPO` | `~/gml/9router-repo` | the repository the result is published into |
+| `LIVE_ROUTER_DIR` | `~/gml/9router` | the running stack, whose pool file is refreshed |
+| `SHIM_URL` | `http://127.0.0.1:8802` | the running shim, for the reload |
+| `MAX_PROXIES` | 120000 | how many unique proxies to validate per run |
+| `VALIDATOR` | `validator/proxy-scraper-checker` | the validator binary |
+
+The validator binary is not in this repository. `refresh_and_publish.sh`
+looks for it in `validator/`, and copies it out of `~/Downloads` when it is
+not there.
+
+## The shim reload
+
+The router reads its pool from one file, and the shim used to read it once at
+startup — so a refreshed pool only took effect on the next restart, and a
+restart throws away every warm session. `POST /reload` on the shim re-reads
+the file and rebinds only the accounts whose proxy is no longer in it. The
+accounts keep their sessions.
+
+```bash
+curl -X POST http://127.0.0.1:8802/reload
+# {"proxies":921,"rebound":96}
+```
 
 ## Output layout
 
