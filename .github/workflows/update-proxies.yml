@@ -27,7 +27,9 @@ jobs:
   update:
     name: Fetch, validate and categorize
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ github.event.inputs.timeout_minutes || 45 }}
+    # fromJSON turns the dispatch input into a number. On a scheduled run the
+    # input is absent, so the fallback is used and stays a number too.
+    timeout-minutes: ${{ fromJSON(github.event.inputs.timeout_minutes || '45') }}
 
     steps:
       - name: Check out repository
