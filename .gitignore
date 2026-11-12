@@ -1,0 +1,9 @@
+# Ignore the working directory, the validator build and local artifacts.
+work/
+validator/
+validator.zip
+*.log
+.DS_Store
+
+# The published pool is committed on purpose: it is the deliverable.
+!output/

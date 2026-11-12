@@ -1,0 +1,111 @@
+name: Update proxy pool
+
+on:
+  schedule:
+    # Every 3 hours. GitHub queues scheduled runs, so the clock is off the
+    # hour to spread the load across the runner pool.
+    - cron: "23 */3 * * *"
+  workflow_dispatch:
+    inputs:
+      max_proxies:
+        description: "Maximum unique proxies to validate"
+        required: false
+        default: "120000"
+      timeout_minutes:
+        description: "Job timeout in minutes"
+        required: false
+        default: "45"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: proxy-pool-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Fetch, validate and categorize
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ github.event.inputs.timeout_minutes || 45 }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache GeoLite databases
+        # The validator downloads the ASN and city databases on the first run
+        # and reuses them afterwards. Caching them saves ~60 MB per run.
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/proxy_scraper_checker
+          key: geolite-${{ runner.os }}-${{ hashFiles('sources/sources.json') }}
+          restore-keys: |
+            geolite-${{ runner.os }}-
+
+      - name: Install validator
+        env:
+          RELEASE: build-4072
+          ASSET: proxy-scraper-checker-binary-x86_64-unknown-linux-gnu.zip
+          SHA256: d889667cbab8e103f4a4c99f1781b2714748d9cae0b52da94f0b9d6e4af98bd4
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o validator.zip \
+            "https://github.com/monosans/proxy-scraper-checker/releases/download/${RELEASE}/${ASSET}"
+          echo "${SHA256}  validator.zip" | sha256sum -c -
+          mkdir -p validator
+          unzip -q validator.zip -d validator
+          chmod +x validator/proxy-scraper-checker
+          ls -l validator/proxy-scraper-checker
+
+      - name: Fetch proxy lists
+        run: |
+          python3 scripts/fetch_sources.py \
+            --sources sources/sources.json \
+            --work-dir work \
+            --max-proxies "${{ github.event.inputs.max_proxies || '120000' }}"
+
+      - name: Validate proxies
+        env:
+          PROXY_SCRAPER_CHECKER_CONFIG: ${{ github.workspace }}/work/config.toml
+        run: |
+          set -euo pipefail
+          # The validator opens a socket per in-flight check, so raise the
+          # descriptor limit above the 1024 concurrent checks.
+          ulimit -n 65535 || true
+          cd work
+          ../validator/proxy-scraper-checker 2>&1 | tee validator.log
+          cd ..
+          test -s work/out/proxies.json
+
+      - name: Categorize working proxies
+        run: python3 scripts/categorize.py --work-dir work --output-dir output
+
+      - name: Commit results
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add output
+          if git diff --cached --quiet; then
+            echo "No proxy changes, nothing to commit."
+            exit 0
+          fi
+          SUMMARY=$(python3 -c "import json;print(json.load(open('output/summary.json'))['total_working'])")
+          git commit -m "chore: refresh proxy pool (${SUMMARY} working proxies)"
+          git push
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: proxy-pool
+          path: |
+            output/
+            work/fetch_report.json
+          retention-days: 7
