@@ -4,6 +4,8 @@ validator/
 validator.zip
 *.log
 .DS_Store
+__pycache__/
+*.pyc
 
 # The published pool is committed on purpose: it is the deliverable.
 !output/
