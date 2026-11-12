@@ -287,6 +287,37 @@ def build_config(pools: dict[str, list[str]], work_dir: str) -> str:
     return "\n".join(lines)
 
 
+def local_source_path(url: str, repos_dir: str) -> str:
+    """The list file inside a checked-out repository, or "" when there is none.
+
+    A raw.githubusercontent URL is /owner/repo/ref/path..., and the checkout is
+    of the default branch, so the ref is usually a single segment.  Both the
+    ref-included and the ref-stripped paths are tried, because the ref is
+    ambiguous in the URL format and only the filesystem can settle it.
+    """
+    marker = "raw.githubusercontent.com/"
+    index = url.find(marker)
+    if index < 0:
+        return ""
+    rest = url[index + len(marker):]
+    parts = rest.split("/", 2)
+    if len(parts) < 3:
+        return ""
+    owner, repo, remainder = parts
+    repo_dir = os.path.join(repos_dir, f"{owner}__{repo}")
+    if not os.path.isdir(repo_dir):
+        return ""
+    candidates = [remainder]
+    head, _, tail = remainder.partition("/")
+    if tail:
+        candidates.append(tail)
+    for candidate in candidates:
+        path = os.path.join(repo_dir, candidate)
+        if os.path.isfile(path):
+            return path
+    return ""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -295,6 +326,12 @@ def main() -> int:
         help="path to the source manifest",
     )
     parser.add_argument("--work-dir", default=os.path.join(REPO_ROOT, "work"))
+    parser.add_argument(
+        "--repos-dir",
+        default="",
+        help="checked-out source repositories; a list found here is read from "
+             "the checkout instead of being downloaded. default: <work-dir>/repos",
+    )
     parser.add_argument("--timeout", type=int, default=25, help="per-request timeout")
     parser.add_argument("--workers", type=int, default=12)
     parser.add_argument(
@@ -312,6 +349,9 @@ def main() -> int:
     work_dir = os.path.abspath(args.work_dir)
     raw_dir = os.path.join(work_dir, "raw")
     pool_dir = os.path.join(work_dir, "pools")
+    repos_dir = os.path.abspath(
+        args.repos_dir or os.path.join(work_dir, "repos")
+    )
     for directory in (raw_dir, pool_dir):
         os.makedirs(directory, exist_ok=True)
 
@@ -319,7 +359,20 @@ def main() -> int:
 
     def load(source: dict) -> dict:
         started = time.time()
-        status, body, error = fetch(source["url"], args.timeout)
+        # A list that was checked out by checkin_sources.py is read from the
+        # checkout: that is the file a git pull brought in, not an anonymous
+        # copy of it.
+        local = local_source_path(source["url"], repos_dir)
+        if local:
+            try:
+                with open(local, "rb") as handle:
+                    body = handle.read()
+                status, error, origin = 200, "", "checkout"
+            except OSError as exc:
+                status, body, error, origin = 0, b"", f"{type(exc).__name__}: {exc}", "checkout"
+        else:
+            status, body, error = fetch(source["url"], args.timeout)
+            origin = "url"
         elapsed = round(time.time() - started, 2)
         record = {
             "id": source["id"],
@@ -328,6 +381,7 @@ def main() -> int:
             "url": source["url"],
             "status": status,
             "error": error,
+            "origin": origin,
             "seconds": elapsed,
             "bytes": len(body),
             "lines": 0,
