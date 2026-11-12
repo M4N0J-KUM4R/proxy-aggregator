@@ -1,66 +1,68 @@
 # Proxy pool summary
 
-Working proxies: **232**
+Working proxies: **781**
 
 ## By protocol
 
 | Protocol | Count |
 | --- | ---: |
-| http | 161 |
-| socks4 | 44 |
-| socks5 | 27 |
+| http | 509 |
+| socks4 | 165 |
+| socks5 | 107 |
 
 ## By speed
 
 | Tier | Count |
 | --- | ---: |
-| slow | 126 |
-| medium | 83 |
-| fast | 23 |
+| medium | 368 |
+| slow | 271 |
+| fast | 142 |
 
 ## By network type
 
 | Type | Count |
 | --- | ---: |
-| unknown | 199 |
-| residential | 30 |
-| datacenter | 3 |
+| unknown | 519 |
+| datacenter | 134 |
+| residential | 128 |
 
 ## By anonymity
 
 | Class | Count |
 | --- | ---: |
-| unknown | 151 |
-| elite | 60 |
-| anonymous | 12 |
-| transparent | 9 |
+| unknown | 510 |
+| elite | 191 |
+| anonymous | 45 |
+| transparent | 35 |
 
-Countries represented: **23**
+Countries represented: **65**
 
 ## Top countries
 
 | Country | Count |
 | --- | ---: |
-| ID | 144 |
-| IN | 23 |
-| BD | 12 |
+| ID | 247 |
+| NL | 78 |
+| IN | 62 |
+| CN | 49 |
+| US | 39 |
+| BD | 31 |
+| VN | 30 |
+| PH | 23 |
+| BR | 19 |
+| SG | 16 |
+| TH | 15 |
+| KH | 14 |
+| DE | 12 |
 | CM | 12 |
-| TH | 9 |
-| VN | 6 |
-| PK | 4 |
-| JP | 4 |
-| CN | 4 |
-| US | 1 |
-| DE | 1 |
-| PL | 1 |
-| NP | 1 |
-| KH | 1 |
-| GQ | 1 |
-| PH | 1 |
-| LY | 1 |
-| KE | 1 |
-| MY | 1 |
-| ZA | 1 |
-| NG | 1 |
-| GM | 1 |
-| RU | 1 |
+| PK | 11 |
+| RU | 10 |
+| HK | 8 |
+| JP | 8 |
+| LY | 6 |
+| GB | 5 |
+| VE | 5 |
+| CO | 5 |
+| ZA | 5 |
+| TR | 5 |
+| CA | 4 |
